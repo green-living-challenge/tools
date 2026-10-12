@@ -22,6 +22,9 @@ button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); 
   .layout { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; }
   .preview { position: sticky; top: 72px; }
 }
+/* The editor stays disabled until the challenge list has loaded, so nothing typed is lost. */
+.editor-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.editor-fields:disabled { opacity: 0.6; }
 .editor, .preview { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 h2 { font-size: 16px; margin: 16px 0 8px; }
 .preview h2 { margin: 0; }

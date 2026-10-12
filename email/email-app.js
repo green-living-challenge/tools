@@ -232,6 +232,7 @@
         </div>
         <main className="layout">
           <section className="editor" aria-label="Email settings">
+            <fieldset className="editor-fields" disabled=${!id}>
             ${registry ? html`
               <label className="field">
                 <span>Challenge</span>
@@ -292,6 +293,7 @@
               })}
             </ol>
             <button type="button" className="reset" onClick=${function () { update(E.defaultSettings()); }}>Reset to template</button>
+            </fieldset>
             <section className="howto" aria-labelledby="howto-title">
               <h2 id="howto-title">How to send it</h2>
               <ol>

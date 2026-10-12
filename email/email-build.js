@@ -21,6 +21,10 @@
   var FONT = 'Arial, Helvetica, sans-serif';
   var WHITE = '#FFFFFF';
   var LIGHT_HEADER_FALLBACK = '#1F2937';
+  var LIGHT_BOX = '#F3F4F6';
+  var LIGHT_LINE = '#E5E7EB';
+  var DARK_INK = '#111827';
+  var DARK_MUTED = '#4B5563';
   var DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
   var TOKEN_RE = /\{([A-Za-z]+)\}/g;
   var BOLD_RE = /\*\*([^*\n]+?)\*\*/g;
@@ -141,22 +145,33 @@
     teal: { headerFrom: '#06415C', accent: '#1E988A', page: '#EEF6F5', ink: '#06415C' }
   };
 
+  // A colour that reads on every background given, else the fallback.
+  function readableOn(color, fallback, backgrounds) {
+    return backgrounds.every(function (bg) { return L.contrastRatio(color, bg) >= 4.5; }) ? color : fallback;
+  }
+
   // The colours of one email. key: a THEMES key (an unknown one means 'challenge');
   // challengeTheme: the challenge descriptor's theme. Missing colours fall back as in the hub.
   // The logos are white, so a header colour that needs dark text is replaced by a dark grey.
+  // Text sits on the white card or on boxes (box: the page colour, or a light grey when the
+  // page is dark), so ink and muted are kept only where they read on both.
   function themeColors(key, challengeTheme) {
     var v = L.themeVars(FIXED_THEMES[key] || challengeTheme);
     var from = v['--glc-from'];
     var header = L.readableTextOn(from) === WHITE ? from : LIGHT_HEADER_FALLBACK;
     var accent = v['--glc-accent'];
+    var page = v['--glc-page'];
+    var lightPage = L.readableTextOn(page) !== WHITE;
+    var box = lightPage ? page : LIGHT_BOX;
     return {
       header: header,
       onHeader: WHITE,
       kicker: L.contrastRatio(accent, header) >= 4.5 ? accent : WHITE,
-      page: v['--glc-page'],
-      ink: v['--glc-ink'],
-      muted: v['--glc-muted'],
-      line: v['--glc-line'],
+      page: page,
+      box: box,
+      ink: readableOn(v['--glc-ink'], DARK_INK, [WHITE, box]),
+      muted: readableOn(v['--glc-muted'], DARK_MUTED, [WHITE, box]),
+      line: lightPage ? v['--glc-line'] : LIGHT_LINE,
       accent: accent,
       onAccent: L.readableTextOn(accent)
     };
@@ -521,14 +536,15 @@
   function statsBlock(s, ctx, c) {
     if (!ctx.ready) return placeholder('The stat tiles appear here once the numbers load.');
     var cells = ctx.stats.map(function (t) {
-      return '<td width="33%" valign="top" style="padding:6px;">' +
-        layout(fill(c.page) + ' style="background-color:' + c.page + ';border-radius:10px;"',
-          '<tr><td align="center"' + fill(c.page) + ' style="background-color:' + c.page + ';padding:16px 6px;border-radius:10px;">' +
-          '<p style="margin:0;' + font(22, 'line-height:1.2;font-weight:bold;color:' + c.ink + ';') + '">' + escapeHtml(t.value) + '</p>' +
+      return '<td width="33%" valign="top" style="padding:4px;">' +
+        layout(fill(c.box) + ' style="background-color:' + c.box + ';border-radius:10px;"',
+          '<tr><td align="center"' + fill(c.box) + ' style="background-color:' + c.box + ';padding:14px 4px;border-radius:10px;">' +
+          '<p style="margin:0;' + font(20, 'line-height:1.2;font-weight:bold;color:' + c.ink + ';') + '">' + escapeHtml(t.value) + '</p>' +
           '<p style="margin:4px 0 0 0;' + font(12, 'line-height:1.3;color:' + c.muted + ';') + '">' + escapeHtml(t.label) + '</p>' +
           '</td></tr>') + '</td>';
     }).join('');
-    return section(layout('', '<tr>' + cells + '</tr>'), '12px 26px 4px 26px');
+    // Tight padding and 20 px numbers keep an eight-digit total inside a 320 px phone screen.
+    return section(layout('', '<tr>' + cells + '</tr>'), '12px 16px 4px 16px');
   }
 
   function raceBlock(s, ctx, c) {
@@ -593,8 +609,8 @@
     var body = renderText(s.texts.reminder, ctx.values, BODY);
     var btn = ctx.form ? button(ctx.form.url, ctx.form.label, c.accent, c.onAccent, false) : '';
     if (!head && !body && !btn) return '';
-    return section(layout(fill(c.page) + ' style="background-color:' + c.page + ';border-radius:8px;"',
-      '<tr><td' + fill(c.page) + ' style="background-color:' + c.page + ';border-left:4px solid ' + c.header + ';border-radius:8px;padding:20px 22px 8px 22px;">' +
+    return section(layout(fill(c.box) + ' style="background-color:' + c.box + ';border-radius:8px;"',
+      '<tr><td' + fill(c.box) + ' style="background-color:' + c.box + ';border-left:4px solid ' + c.header + ';border-radius:8px;padding:20px 22px 8px 22px;">' +
       (head ? '<p style="margin:0 0 10px 0;' + font(16, 'line-height:1.3;font-weight:bold;color:' + c.ink + ';') + '">' + head + '</p>' : '') +
       body + (btn ? '<div style="padding:0 0 14px 0;">' + btn + '</div>' : '') +
       '</td></tr>'), '20px 32px 8px 32px');
