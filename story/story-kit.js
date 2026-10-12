@@ -17,6 +17,12 @@
     { family: 'StoryInter', url: 'fonts/inter-latin-800.woff2', weight: '800' }
   ];
 
+  // Where each font's alphabetic baseline sits below the top of a line, as a share of the size.
+  // Text is drawn on that baseline, because browsers disagree on textBaseline 'top' (Chrome takes
+  // the em box, Safari the font's ascent: Anton text came out 0.4 of its size lower on Safari).
+  // The values are Chrome's own, measured on 2026-10-12, so the layouts tuned there hold everywhere.
+  var BASELINE = { StoryHand: 0.6541, StoryAnton: 0.7814, StoryArchivo: 0.807, StoryInter: 0.8006 };
+
   var loading = null;
 
   // Loads the five font files once. Resolves true when every one is ready, false when one fails
@@ -77,10 +83,11 @@
       return o.spacing ? w + o.spacing * Math.max(0, s.length - 1) : w;
     }
 
-    function paint(s, x, y, o) {
+    function paint(s, x, top, o) {
       ctx.font = font(o);
-      ctx.textBaseline = 'top';
+      ctx.textBaseline = 'alphabetic';
       ctx.textAlign = 'left';
+      var y = top + (BASELINE[o.family || 'StoryInter'] || 0.8) * o.size;
       var draw = function (str, px) {
         if (o.outline) {
           ctx.lineWidth = o.outline;
