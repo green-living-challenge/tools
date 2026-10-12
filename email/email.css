@@ -1,0 +1,47 @@
+/* GLC email builder: the page around the preview. The email carries its own inline styles. */
+:root { --ink: #1F2937; --muted: #4B5563; --line: #D1D5DB; --page: #F5F0E8; --card: #FFFFFF; --brand: #4A1526; --on-brand: #FFFFFF; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+.shell { padding: 24px 16px; }
+.top { background: var(--brand); color: var(--on-brand); }
+.top-inner { max-width: 1200px; margin: 0 auto; padding: 16px; }
+.top h1 { margin: 0; font-size: 20px; }
+.top p { margin: 4px 0 0; font-size: 14px; }
+.toolbar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: 1200px; margin: 0 auto; padding: 12px 16px; background: var(--page); border-bottom: 1px solid var(--line); }
+button { font: inherit; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); cursor: pointer; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); font-weight: 600; }
+button.link { border: 0; background: none; padding: 0; text-decoration: underline; color: var(--brand); }
+button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #FFFFFF; }
+:focus-visible { outline: 3px solid #F59E0B; outline-offset: 2px; }
+.status, .message { margin: 0; flex-basis: 100%; font-size: 13px; color: var(--muted); }
+.message { color: var(--ink); font-weight: 600; }
+.message:empty { display: none; }
+.layout { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1024px) {
+  .layout { grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; }
+  .preview { position: sticky; top: 72px; }
+}
+.editor, .preview { min-width: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+h2 { font-size: 16px; margin: 16px 0 8px; }
+.preview h2 { margin: 0; }
+.field { display: block; margin: 0 0 12px; }
+.field > span, .field > label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+input[type="text"], input[type="url"], select, textarea { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #FFFFFF; color: var(--ink); }
+textarea { resize: vertical; }
+.row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.row input { flex: 1; min-width: 0; }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+.hint { font-size: 12px; color: var(--muted); margin: 4px 0 8px; overflow-wrap: anywhere; }
+.blocks { list-style: none; margin: 0; padding: 0; }
+.block { border: 1px solid var(--line); border-radius: 10px; padding: 10px; margin: 0 0 8px; }
+.block.off { background: #F9FAFB; }
+.block.off .check { color: var(--muted); }
+.block-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.moves { display: flex; gap: 4px; }
+.moves button { padding: 4px 10px; font-size: 13px; }
+.reset { margin-top: 8px; }
+.howto ol { padding-left: 20px; margin: 0; font-size: 14px; }
+.frame-box { overflow-x: auto; margin-top: 12px; padding: 12px; background: #E5E7EB; border-radius: 8px; }
+iframe { display: block; margin: 0 auto; border: 0; background: #FFFFFF; height: 600px; }
+.empty { margin: 0; padding: 24px; text-align: center; color: var(--muted); }
