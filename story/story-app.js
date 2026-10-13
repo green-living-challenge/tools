@@ -1,13 +1,15 @@
 /* GLC tools: the story maker page. Reads the registry and one challenge like the hub does (GLC
    public first, the API second), plans today's stories with story-plan.js, draws them with
-   story-draw.js, and shares or downloads the PNGs. Today's changes are kept in this browser for
-   the day. Spec: docs/superpowers/specs/2026-10-12-story-maker-design.md */
+   story-draw.js, and shares or downloads the PNGs. Its WhatsApp tab (wa-panel.js) shows today's
+   messages with the picture of the day, which is drawn here with wa-draw.js. Today's changes are
+   kept in this browser for the day. Specs: docs/superpowers/specs/2026-10-12-story-maker-design.md
+   and docs/superpowers/specs/2026-10-13-whatsapp-messages-design.md */
 (function () {
   'use strict';
 
   var rootEl = document.getElementById('root');
   if (!window.React || !window.ReactDOM || !window.htm || !window.GLCLogic || !window.GLCData || !window.GLCStory ||
-      !window.GLCStoryKit || !window.GLCStoryDraw) {
+      !window.GLCStoryKit || !window.GLCStoryDraw || !window.GLCWhatsApp || !window.GLCWhatsAppDraw || !window.GLCWhatsAppPanel) {
     if (rootEl) rootEl.textContent = 'The story maker could not start. Reload the page.';
     return;
   }
@@ -19,6 +21,9 @@
   var S = window.GLCStory;
   var Kit = window.GLCStoryKit;
   var Draw = window.GLCStoryDraw;
+  var Wa = window.GLCWhatsApp;
+  var WaDraw = window.GLCWhatsAppDraw;
+  var WaPanel = window.GLCWhatsAppPanel;
   var useState = React.useState;
   var useEffect = React.useEffect;
   var useRef = React.useRef;
@@ -150,9 +155,10 @@
     return t ? t.label : type;
   }
 
-  // Draws each story once per content and keeps its PNG: { images: { [key]: { url, file, problems } },
-  // failed }. Only the stories whose content changed are drawn again; images no longer used are
-  // let go. failed: a story could not be made (a canvas the device refused, for example).
+  // Draws each item (a story or the WhatsApp picture: { key, name, draw(canvas) -> problems }) once
+  // per content and keeps its PNG: { images: { [key]: { url, file, problems } }, failed }. Only the
+  // items whose content changed are drawn again; images no longer used are let go. failed: an
+  // image could not be made (a canvas the device refused, for example).
   function useImages(items, enabled) {
     var s = useState({ images: {}, failed: false });
     var setState = s[1];
@@ -166,7 +172,7 @@
         chain = chain.then(function () {
           if (cancelled || cache.current[it.key]) return null;
           var canvas = document.createElement('canvas');
-          var problems = Draw.draw(canvas, it.content);
+          var problems = it.draw(canvas);
           // A canvas holds about 8 MB until it is emptied; phones cap the total.
           var release = function () { canvas.width = 0; canvas.height = 0; };
           return Kit.toBlob(canvas).then(function (blob) {
@@ -231,6 +237,11 @@
     });
   }
 
+  // 'whatsapp' when the address asks for the WhatsApp tab (#whatsapp), else 'instagram'.
+  function tabFromHash() {
+    return window.location.hash === '#whatsapp' ? 'whatsapp' : 'instagram';
+  }
+
   function App() {
     var w = useState(null);
     var wanted = w[0];
@@ -261,6 +272,9 @@
     var v = useState(-1);
     var viewing = v[0];
     var setViewing = v[1];
+    var tb = useState(tabFromHash);
+    var tab = tb[0];
+    var setTab = tb[1];
 
     var facts = useMemo(function () {
       return registry && id ? S.buildFacts(registry, data.payload, id, Date.now()) : null;
@@ -273,13 +287,28 @@
         if (!st.on) return;
         var content = S.storyContent(facts, st, { look: plan.look, names: names });
         if (!content) return;
-        items.push({ slot: st.slot, key: JSON.stringify([names, content]), content: content, name: S.fileName(facts.id, today, i + 1, st.type) });
+        items.push({
+          slot: st.slot, key: JSON.stringify([names, content]), content: content, name: S.fileName(facts.id, today, i + 1, st.type),
+          draw: function (canvas) { return Draw.draw(canvas, content); }
+        });
       });
     }
+    // The WhatsApp picture of the day, drawn with the stories whichever tab is open.
+    var picture = plan && ready ? Wa.pictureOfDay(facts, plan, day) : null;
+    var card = picture ? Wa.cardContent(facts, plan, picture.chosen, { look: plan.look, names: names }) : null;
+    var cardItem = card ? {
+      key: 'wa:' + JSON.stringify([names, card]), name: Wa.fileName(facts.id, today, picture.chosen),
+      draw: function (canvas) { return WaDraw.draw(canvas, card); }
+    } : null;
+    var link = registry && id ? Wa.hubLink(id, registry.defaultId) : Wa.HUB_LINK;
     var made = useImages(items, ready && fontsOk === true);
+    // The picture is drawn apart from the stories, and only on the WhatsApp tab, so the stories
+    // never wait for it or fail with it.
+    var madeCard = useImages(cardItem ? [cardItem] : [], ready && fontsOk === true && tab === 'whatsapp');
     var images = made.images;
     var drawn = items.filter(function (it) { return images[it.key]; });
     var allDrawn = items.length > 0 && drawn.length === items.length;
+    var cardImage = cardItem ? madeCard.images[cardItem.key] || null : null;
 
     useEffect(function () {
       if (!message) return undefined;
@@ -293,6 +322,21 @@
       window.addEventListener('keydown', onKey);
       return function () { window.removeEventListener('keydown', onKey); };
     }, [viewing]);
+
+    useEffect(function () {
+      var onHash = function () { setTab(tabFromHash()); };
+      window.addEventListener('hashchange', onHash);
+      return function () { window.removeEventListener('hashchange', onHash); };
+    }, []);
+
+    function pickTab(next) {
+      setTab(next);
+      try {
+        window.history.replaceState(null, '', next === 'whatsapp' ? '#whatsapp' : window.location.pathname + window.location.search);
+      } catch (e) {
+        // An address that cannot be changed: the tab still switches.
+      }
+    }
 
     function refresh() {
       setAttempt(function (x) { return x + 1; });
@@ -391,12 +435,17 @@
         <header className="top">
           <div className="top-inner">
             <h1>GLC story maker</h1>
-            <p>Today's Instagram stories from the live challenge numbers, ready to share.</p>
+            <p>Today's Instagram stories and WhatsApp messages from the live challenge numbers, ready to share.</p>
           </div>
         </header>
+        <div className="tabs" role="tablist" aria-label="Where to post">
+          <button type="button" role="tab" className="tab" aria-selected=${tab === 'instagram'} onClick=${function () { pickTab('instagram'); }}>Instagram</button>
+          <button type="button" role="tab" className="tab" aria-selected=${tab === 'whatsapp'} onClick=${function () { pickTab('whatsapp'); }}>WhatsApp</button>
+        </div>
         <div className="toolbar" role="toolbar" aria-label="Story actions">
-          <button type="button" className="primary" disabled=${!canAct} onClick=${function () { share(drawn.map(function (it) { return images[it.key].file; })); }}>Share all</button>
-          <button type="button" disabled=${!canAct} onClick=${downloadAll}>Download all</button>
+          ${tab === 'instagram' ? html`
+            <button type="button" className="primary" disabled=${!canAct} onClick=${function () { share(drawn.map(function (it) { return images[it.key].file; })); }}>Share all</button>
+            <button type="button" disabled=${!canAct} onClick=${downloadAll}>Download all</button>` : null}
           <button type="button" disabled=${!plan || !plan.stories.length} onClick=${function () { updateDay(S.shuffleDay(day)); }}>Shuffle</button>
           <button type="button" disabled=${!plan || !plan.stories.length} onClick=${function () { updateDay(S.emptyDayState()); }}>Reset today</button>
           <button type="button" disabled=${data.loading} onClick=${refresh}>Refresh data</button>
@@ -424,9 +473,13 @@
             </label>
             ${dayLine ? html`<p className="day-line">${dayLine}</p>` : null}
           </fieldset>
-          ${plan && plan.state === 'before' && facts ? html`<p className="empty">Stories begin on ${S.longDay(facts.startDate)}, the first day of the challenge.</p>` : null}
-          ${plan && plan.stories.length ? html`<ol className="stories" aria-label="Today's stories">${plan.stories.map(storyCard)}</ol>` : null}
-          <section className="helpers" aria-labelledby="helpers-title">
+          ${tab === 'whatsapp' ? html`
+            <${WaPanel} facts=${facts} plan=${plan} day=${day} updateDay=${updateDay} names=${names} link=${link}
+              picture=${picture} image=${cardImage} imageFailed=${madeCard.failed} canShare=${fontsOk === true} shareFiles=${shareFiles}
+              downloadFile=${downloadFile} setMessage=${setMessage} />` : null}
+          ${tab === 'instagram' && plan && plan.state === 'before' && facts ? html`<p className="empty">Stories begin on ${S.longDay(facts.startDate)}, the first day of the challenge.</p>` : null}
+          ${tab === 'instagram' && plan && plan.stories.length ? html`<ol className="stories" aria-label="Today's stories">${plan.stories.map(storyCard)}</ol>` : null}
+          ${tab === 'instagram' ? html`<section className="helpers" aria-labelledby="helpers-title">
             <h2 id="helpers-title">Posting</h2>
             <ol>
               <li>Post the stories in order, starting with 1.</li>
@@ -441,7 +494,7 @@
                 <p className="row"><span>${poll.question}</span><button type="button" onClick=${function () { copyText(poll.question, 'Question'); }}>Copy</button></p>
                 ${poll.options.map(function (o) { return html`<p key=${o} className="row"><span>${o}</span><button type="button" onClick=${function () { copyText(o, 'Option'); }}>Copy</button></p>`; })}
               </div>` : null}
-          </section>
+          </section>` : null}
         </main>
         ${viewedImg ? html`
           <div className="viewer" role="dialog" aria-modal="true" aria-label="Story full screen" onClick=${function () { setViewing(-1); }}>

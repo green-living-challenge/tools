@@ -1,14 +1,21 @@
 /* GLC tools: the story maker's canvas kit. Loads the fonts, and draws text that fits, shapes and
-   the logos on a 1080 x 1920 canvas, keeping a record of every box drawn so the checks can find
-   text that overflows or enters Instagram's bars. Browser only: window.GLCStoryKit, loaded after
-   hub-logos.js. Spec: docs/superpowers/specs/2026-10-12-story-maker-design.md, sections 2 and 4. */
+   the logos on a frame (a 1080 x 1920 story or a 1080 x 1350 WhatsApp card), keeping a record of
+   every box drawn so the checks can find text that overflows or leaves the content area. Browser
+   only: window.GLCStoryKit, loaded after hub-logos.js. Specs:
+   docs/superpowers/specs/2026-10-12-story-maker-design.md, sections 2 and 4, and
+   docs/superpowers/specs/2026-10-13-whatsapp-messages-design.md, section 3. */
 (function () {
   'use strict';
 
-  var W = 1080;
-  var H = 1920;
-  // The content area: Instagram draws its own bars above 250 px and below 1640 px.
-  var SAFE = { left: 80, right: 1000, top: 250, bottom: 1640 };
+  // The frames a session draws on, each with its content area. A story's: Instagram draws its own
+  // bars above 250 px and below 1640 px. A card's: 80 px margins, 60 px at the top.
+  var FRAMES = {
+    story: { w: 1080, h: 1920, safe: { left: 80, right: 1000, top: 250, bottom: 1640 } },
+    card: { w: 1080, h: 1350, safe: { left: 80, right: 1000, top: 60, bottom: 1290 } }
+  };
+  var W = FRAMES.story.w;
+  var H = FRAMES.story.h;
+  var SAFE = FRAMES.story.safe;
   var FONTS = [
     { family: 'StoryHand', url: 'vendor/gochi-hand-latin.woff2', weight: '400' },
     { family: 'StoryAnton', url: 'fonts/anton-latin-400.woff2', weight: '400' },
@@ -47,9 +54,13 @@
     return loading;
   }
 
-  // A drawing session on one canvas. Every draw call adds a box to session.boxes:
-  // { kind: 'text' | 'shape' | 'background', x, y, w, h, overflow, what }.
-  function session(canvas) {
+  // A drawing session on one canvas, in frame (FRAMES.story when left out). Every draw call adds a
+  // box to session.boxes: { kind: 'text' | 'shape' | 'background', x, y, w, h, overflow, what }.
+  function session(canvas, frame) {
+    var fr = frame || FRAMES.story;
+    var W = fr.w;
+    var H = fr.h;
+    var SAFE = fr.safe;
     canvas.width = W;
     canvas.height = H;
     var ctx = canvas.getContext('2d');
@@ -397,5 +408,5 @@
     });
   }
 
-  window.GLCStoryKit = { W: W, H: H, SAFE: SAFE, FONTS: FONTS, loadFonts: loadFonts, session: session, toBlob: toBlob };
+  window.GLCStoryKit = { W: W, H: H, SAFE: SAFE, FRAMES: FRAMES, FONTS: FONTS, loadFonts: loadFonts, session: session, toBlob: toBlob };
 })();

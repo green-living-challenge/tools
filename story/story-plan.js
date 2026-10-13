@@ -331,6 +331,7 @@
       ready: !!p,
       id: d.id,
       name: text(d.name) || 'Challenge',
+      icon: text(d.icon),
       tagline: text(d.tagline),
       prizes: text(d.prizes),
       ranked: d.leaderboard === 'ranked',
@@ -392,15 +393,19 @@
 
   // ---------- section C: the day's set and today's changes ----------
 
+  var CARDS = ['day', 'standings'];
+
   function emptyDayState() {
     return { look: '', shuffle: 0, slots: [] };
   }
 
-  // A saved day of any shape -> { look, shuffle, slots: [{ type, on, headline }] }.
+  // A saved day of any shape -> { look, shuffle, slots: [{ type, on, headline }], card? }. card,
+  // the WhatsApp picture chosen for the day, is there only when it is 'day' or 'standings'.
   function mergeDayState(saved) {
     var s = emptyDayState();
     if (!isObject(saved)) return s;
     if (LOOKS.some(function (l) { return l.key === saved.look; })) s.look = saved.look;
+    if (CARDS.indexOf(saved.card) >= 0) s.card = saved.card;
     var k = Math.floor(num(saved.shuffle));
     s.shuffle = k > 0 && k < 1000 ? k : 0;
     (Array.isArray(saved.slots) ? saved.slots.slice(0, 6) : []).forEach(function (o, i) {
@@ -427,6 +432,14 @@
     var s = mergeDayState(saved);
     s.look = look;
     return mergeDayState(s);
+  }
+
+  // The WhatsApp picture for the day: 'day' or 'standings'; anything else goes back to today's pick.
+  function setCard(saved, card) {
+    var s = mergeDayState(saved);
+    if (CARDS.indexOf(card) >= 0) s.card = card;
+    else delete s.card;
+    return s;
   }
 
   // Shuffle: the next pick of features and wordings. Swaps and headlines are cleared, because
@@ -488,6 +501,7 @@
     mergeDayState: mergeDayState,
     setSlot: setSlot,
     setLook: setLook,
+    setCard: setCard,
     shuffleDay: shuffleDay,
     planDay: planDay
   });
@@ -851,9 +865,16 @@
     return id + '-' + today + '-' + position + '-' + type + '.png';
   }
 
+  // A hall as a chip in a look: { code, color, onColor, value }, the colour toned as the stories tone it.
+  function hallChip(f, look, h) {
+    return hallBrief(f, palette(look, f.theme), h);
+  }
+
   Object.assign(api, {
     palette: palette,
     surface: surface,
+    whereText: whereText,
+    hallChip: hallChip,
     storyContent: storyContent,
     defaultHeadline: defaultHeadline,
     pollHelper: pollHelper,
