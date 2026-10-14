@@ -1,0 +1,19 @@
+/* GLC email view: only the bar is styled here. The email below it carries its own inline styles,
+   and nothing here may reach it, so what is copied looks as it does in Gmail. */
+body { margin: 0; background: #FFFFFF; }
+.bar { -webkit-user-select: none; user-select: none; background: #FFFFFF; color: #1F2937; border-bottom: 1px solid #D1D5DB; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+.bar-inner { max-width: 640px; margin: 0 auto; padding: 12px 16px; box-sizing: border-box; }
+.bar p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.bar .title { font-weight: 700; font-size: 16px; color: #4A1526; }
+.bar .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+.bar button { font: inherit; padding: 8px 14px; border: 1px solid #D1D5DB; border-radius: 8px; background: #FFFFFF; color: #1F2937; cursor: pointer; }
+.bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+.bar button.primary { background: #4A1526; border-color: #4A1526; color: #FFFFFF; font-weight: 600; }
+.bar button.link { border: 0; background: none; padding: 0; text-decoration: underline; color: #4A1526; }
+.bar .edit { color: #4A1526; font-weight: 600; }
+.bar :focus-visible { outline: 3px solid #F59E0B; outline-offset: 2px; }
+.bar .subject:empty, .bar .message:empty { display: none; }
+.bar .status, .bar .hint { font-size: 13px; color: #4B5563; }
+.bar .message { font-weight: 600; }
+.bar .warning { padding: 8px 10px; border-radius: 8px; background: #FEF3C7; color: #78350F; font-size: 14px; }
+.nojs { padding: 16px; font-family: Arial, Helvetica, sans-serif; }

@@ -48,3 +48,5 @@ textarea { resize: vertical; }
 .frame-box { overflow-x: auto; margin-top: 12px; padding: 12px; background: #E5E7EB; border-radius: 8px; }
 iframe { display: block; margin: 0 auto; border: 0; background: #FFFFFF; height: 600px; }
 .empty { margin: 0; padding: 24px; text-align: center; color: var(--muted); }
+.howto h3 { font-size: 14px; margin: 16px 0 4px; }
+.howto p { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; }

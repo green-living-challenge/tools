@@ -22,6 +22,28 @@
   var DRAFT_PREFIX = 'glc-email:v1:';
   var TOKENS = '{challenge} {week} {participants} {total} {unit} {daysLeft} {endDate} {asOf} {tagline} {prizes}';
   var COPY_FAILED = 'Copying did not work in this browser. Use Download .html, open the file, select all and copy.';
+  var LINK_BY_HAND = 'Copying did not work here. Copy this link: ';
+  // The page that shows one email ready to copy, which Share link points to.
+  var VIEW_URL = new URL('view/', window.location.href).href;
+
+  // A link from the view page's "Edit in the builder" carries the challenge and its draft. The
+  // draft replaces this browser's draft of that challenge once, and the address is cleaned so a
+  // reload does not apply it again.
+  var opened = E.readLink(window.location.hash);
+  var pending = opened.shared && !opened.broken ? { id: opened.id, settings: opened.settings } : null;
+  var openedMessage = opened.broken ? 'The link was cut short or changed, so the builder shows the draft kept in this browser.' : '';
+  var SHARED_OPENED = 'Opened the shared version of this email. It replaced the draft kept in this browser.';
+  // Another shared link pasted into this tab changes only the hash: start again from it.
+  window.addEventListener('hashchange', function () {
+    if (window.location.hash) window.location.reload();
+  });
+  if (window.location.hash) {
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    } catch (e) {
+      // The address keeps its hash; the draft is still applied only once.
+    }
+  }
 
   // One payload, checked: { ok: true, payload, source } or { ok: false, error }.
   function load(config, route, id, gid) {
@@ -79,18 +101,27 @@
     return data;
   }
 
-  // The settings of one challenge, saved in this browser on every change.
-  function useDraft(id) {
+  // The settings of one challenge, saved in this browser on every change. onShared runs when the
+  // draft from the address replaces the one kept here.
+  function useDraft(id, onShared) {
     var s = useState(function () { return E.defaultSettings(); });
     var settings = s[0];
     var setSettings = s[1];
-    useEffect(function () {
-      if (id) setSettings(E.mergeSettings(store.get(DRAFT_PREFIX + id)));
-    }, [id]);
     function update(next) {
       setSettings(next);
       if (id) store.set(DRAFT_PREFIX + id, next);
     }
+    useEffect(function () {
+      if (!id) return;
+      if (pending && (pending.id === null || pending.id === id)) {
+        var p = pending.settings;
+        pending = null;
+        update(p);
+        onShared();
+        return;
+      }
+      setSettings(E.restoreDraft(store.get(DRAFT_PREFIX + id)));
+    }, [id]);
     return [settings, update];
   }
 
@@ -106,7 +137,7 @@
   }
 
   function App() {
-    var w = useState(null);
+    var w = useState(opened.id);
     var wanted = w[0];
     var setWanted = w[1];
     var a = useState(0);
@@ -115,22 +146,23 @@
     var data = useData(wanted, attempt);
     var registry = data.registry;
     var id = registry ? (wanted && L.findChallenge(registry, wanted) ? wanted : L.pickDefault(registry, L.todayInDubai(Date.now()))) : null;
-    var draft = useDraft(id);
+    var m = useState(openedMessage);
+    var message = m[0];
+    var setMessage = m[1];
+    var draft = useDraft(id, function () { setMessage(SHARED_OPENED); });
     var settings = draft[0];
     var update = draft[1];
     var v = useState('desktop');
     var width = v[0];
     var setWidth = v[1];
-    var m = useState('');
-    var message = m[0];
-    var setMessage = m[1];
     var frameRef = useRef(null);
     var ctx = registry && id ? E.buildContext(registry, data.payload, id, Date.now()) : null;
     var email = ctx ? E.buildEmail(settings, ctx) : '';
     var ready = !!(ctx && ctx.ready);
 
     useEffect(function () {
-      if (!message) return undefined;
+      // A link shown for copying by hand stays until the next message.
+      if (!message || message.indexOf(LINK_BY_HAND) === 0) return undefined;
       var timer = setTimeout(function () { setMessage(''); }, 8000);
       return function () { clearTimeout(timer); };
     }, [message]);
@@ -199,6 +231,18 @@
       }
     }
 
+    function share() {
+      var link = E.shareLink(VIEW_URL, id, settings);
+      var byHand = function () { setMessage(LINK_BY_HAND + link); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(function () {
+          setMessage('Link copied. Whoever opens it gets this email with the numbers of that moment, ready to copy into Gmail.');
+        }, byHand);
+      } else {
+        byHand();
+      }
+    }
+
     function download() {
       var url = URL.createObjectURL(new Blob([email], { type: 'text/html' }));
       var link = document.createElement('a');
@@ -226,6 +270,7 @@
           <button type="button" className="primary" disabled=${!ready} onClick=${copyRich}>Copy for Gmail</button>
           <button type="button" disabled=${!ready} onClick=${function () { copyText(email, 'HTML'); }}>Copy HTML</button>
           <button type="button" disabled=${!ready} onClick=${download}>Download .html</button>
+          <button type="button" disabled=${!ctx} onClick=${share}>Share link</button>
           <button type="button" disabled=${data.loading} onClick=${refresh}>Refresh data</button>
           <p className="status">${status}${data.error ? html` <button type="button" className="link" onClick=${refresh}>Try again</button>` : null}</p>
           <p className="message" role="status">${message}</p>
@@ -302,6 +347,9 @@
                 <li>Copy the subject line into the message's subject.</li>
                 <li>Send it to yourself first and check it on your phone, then send it to residents.</li>
               </ol>
+              <h3>Someone else sends it</h3>
+              <p>Click <strong>Share link</strong> and send them the link. It opens this email, with your text, on a page with a <strong>Copy email</strong> button. The numbers are the latest at the moment they open it. Changed the text afterwards? Share a new link.</p>
+              <p>The team link always shows the template text with the latest numbers: <a href=${VIEW_URL}>${VIEW_URL}</a></p>
             </section>
           </section>
           <section className="preview" aria-label="Preview">

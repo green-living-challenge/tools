@@ -16,7 +16,11 @@
   // ---------- section A: text, tokens, dates, themes, settings ----------
 
   var TIMEZONE = 'Asia/Dubai';
-  var HUB_URL = 'https://green-living-challenge.github.io/leaderboard/';
+  // Every hub link in an email carries the email tag, so the visit log counts the visits it brings.
+  var HUB_URL = 'https://green-living-challenge.github.io/leaderboard/?src=email';
+  // The default before the tag. A draft that still holds it gets the tagged one.
+  var UNTAGGED_HUB_URL = 'https://green-living-challenge.github.io/leaderboard/';
+  var GLC_HOST = 'green-living-challenge.github.io';
   var IMG_BASE = 'https://green-living-challenge.github.io/tools/email/img/';
   var FONT = 'Arial, Helvetica, sans-serif';
   var WHITE = '#FFFFFF';
@@ -186,6 +190,7 @@
     { type: 'reminder', label: 'Reminder', fields: [{ key: 'reminderHeading', label: 'Heading' }, { key: 'reminder', label: 'Text', long: true }] },
     { type: 'prizes', label: 'Prizes', fields: [{ key: 'prizesHeading', label: 'Heading' }, { key: 'prizes', label: 'Text', long: true }] },
     { type: 'hub', label: 'Hub button', fields: [{ key: 'hubText', label: 'Text', long: true }] },
+    { type: 'me', label: 'My page', fields: [{ key: 'meText', label: 'Text', long: true }] },
     { type: 'whatsapp', label: 'WhatsApp community', fields: [{ key: 'whatsapp', label: 'Text', long: true }] },
     { type: 'signoff', label: 'Sign-off', fields: [{ key: 'signoff', label: 'Text', long: true }] },
     { type: 'footer', label: 'Footer', fields: [{ key: 'footer', label: 'Text' }] }
@@ -201,6 +206,7 @@
     prizesHeading: 'What you can win',
     prizes: '{prizes}',
     hubText: 'See every hall and every participant on the live leaderboard, updated through the day.',
+    meText: '**Your own page.** Sign in with your AUS account to see every entry you logged, whether it counted, your streak and your rank.',
     whatsapp: 'Join the GLC WhatsApp community for reminders, results and event news.',
     signoff: 'Best regards,\n**Student Residential Life Department**\nIn collaboration with the Office of Sustainability',
     footer: 'American University of Sharjah, Student Residential Life, Office of Sustainability'
@@ -224,6 +230,9 @@
     return -1;
   }
 
+  // A block added after drafts were saved starts on or off with the block it belongs with.
+  var FOLLOWS = { me: 'hub' };
+
   // A saved draft of any shape (an older page, a broken value, null) -> complete settings.
   // Unknown and repeated blocks are dropped; a missing block is put back after the nearest
   // earlier block of the default order; every value of the wrong type takes its default.
@@ -245,7 +254,8 @@
           break;
         }
       }
-      blocks.splice(at, 0, { type: type, on: true });
+      var leader = FOLLOWS[type] ? indexOfType(blocks, FOLLOWS[type]) : -1;
+      blocks.splice(at, 0, { type: type, on: leader < 0 || blocks[leader].on });
     });
     var texts = {};
     Object.keys(DEFAULT_TEXTS).forEach(function (k) {
@@ -260,6 +270,13 @@
       blocks: blocks,
       texts: texts
     };
+  }
+
+  // A draft read back from this browser -> complete settings. A draft saved while the untagged hub
+  // link was the default gets the tagged one; a link typed into the field later is kept as typed.
+  function restoreDraft(saved) {
+    if (isObject(saved) && saved.hubUrl === UNTAGGED_HUB_URL) saved = Object.assign({}, saved, { hubUrl: HUB_URL });
+    return mergeSettings(saved);
   }
 
   // New settings with one block moved by step (-1 up, +1 down). Unchanged at either end.
@@ -289,6 +306,152 @@
     return mergeSettings(s);
   }
 
+  // ---------- share links: the view page's address with the draft in it ----------
+
+  var BASE64URL_RE = /^[A-Za-z0-9_-]+$/;
+
+  function blockOrder(blocks) {
+    return blocks.map(function (b) { return (b.on ? '' : '-') + b.type; }).join(',');
+  }
+
+  // 'header,-race,...' -> blocks; a minus marks a block that is off.
+  function readOrder(order) {
+    return String(order).split(',').map(function (x) {
+      return { type: x.charAt(0) === '-' ? x.slice(1) : x, on: x.charAt(0) !== '-' };
+    });
+  }
+
+  function toBase64Url(str) {
+    var bytes = new TextEncoder().encode(str);
+    var bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  // null for anything that is not base64url of valid UTF-8.
+  function fromBase64Url(code) {
+    if (typeof code !== 'string' || !BASE64URL_RE.test(code) || code.length % 4 === 1) return null;
+    try {
+      var bin = atob(code.replace(/-/g, '+').replace(/_/g, '/'));
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Settings -> a short code holding only what differs from the template: { v: 1, theme, subject,
+  // hubUrl, showNames, blocks: 'header,-race,...', texts: { changed ones } }. No challenge data.
+  function encodeDraft(settings) {
+    var s = mergeSettings(settings);
+    var d = defaultSettings();
+    var out = { v: 1 };
+    ['theme', 'subject', 'hubUrl', 'showNames'].forEach(function (k) {
+      if (s[k] !== d[k]) out[k] = s[k];
+    });
+    if (blockOrder(s.blocks) !== blockOrder(d.blocks)) out.blocks = blockOrder(s.blocks);
+    var texts = {};
+    Object.keys(d.texts).forEach(function (k) {
+      if (s.texts[k] !== d.texts[k]) texts[k] = s.texts[k];
+    });
+    if (Object.keys(texts).length) out.texts = texts;
+    return toBase64Url(JSON.stringify(out));
+  }
+
+  // A code from encodeDraft -> complete settings, repaired like a saved draft. null when the code
+  // was cut short, changed, or made by a later version of the page.
+  function decodeDraft(code) {
+    var json = fromBase64Url(code);
+    if (json === null) return null;
+    var o;
+    try {
+      o = JSON.parse(json);
+    } catch (e) {
+      return null;
+    }
+    if (!isObject(o) || o.v !== 1) return null;
+    var saved = Object.assign({}, o);
+    saved.hubUrl = typeof o.hubUrl === 'string' ? o.hubUrl : HUB_URL;
+    saved.blocks = typeof o.blocks === 'string' ? readOrder(o.blocks) : defaultSettings().blocks;
+    return mergeSettings(saved);
+  }
+
+  // The hash of a share link: the challenge and the draft.
+  function linkHash(id, settings) {
+    return 'c=' + encodeURIComponent(String(id)) + '&d=' + encodeDraft(settings);
+  }
+
+  // viewUrl: the view page's address (any hash on it is dropped).
+  function shareLink(viewUrl, id, settings) {
+    return String(viewUrl).split('#')[0] + '#' + linkHash(id, settings);
+  }
+
+  // location.hash of the view page or the builder -> { id, settings, broken, shared }. id: the
+  // challenge asked for, or null for the default one. shared: the link carried a draft. broken:
+  // it carried one that could not be read, and settings are then the template.
+  function readLink(hash) {
+    var params = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+    var id = text(params.get('c')) || null;
+    if (!params.has('d')) return { id: id, settings: defaultSettings(), broken: false, shared: false };
+    var settings = decodeDraft(params.get('d'));
+    return { id: id, settings: settings || defaultSettings(), broken: !settings, shared: true };
+  }
+
+  var TYPED_LINK_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+  // A link that does not lead to the leaderboard -> how the view page names it (its host, or its
+  // host and path on the GLC site), else ''.
+  function foreignPlace(link) {
+    var u;
+    try {
+      u = new URL(/^www\./i.test(link) ? 'https://' + link : link);
+    } catch (e) {
+      return '';
+    }
+    var host = u.host.toLowerCase();
+    if (host !== GLC_HOST) return host;
+    return u.pathname.indexOf('/leaderboard/') === 0 ? '' : host + u.pathname;
+  }
+
+  // The places a draft links to that are not the GLC leaderboard: the hub link, and any address
+  // typed in the subject or a text (Gmail makes those clickable). The view page names them, since
+  // anyone can make a share link with any text.
+  function offSiteLinks(settings) {
+    var s = mergeSettings(settings);
+    var links = [];
+    var hub = httpsUrl(s.hubUrl);
+    if (hub) links.push(hub);
+    [s.subject].concat(Object.keys(s.texts).map(function (k) { return s.texts[k]; })).forEach(function (t) {
+      links = links.concat(String(t).match(TYPED_LINK_RE) || []);
+    });
+    var places = [];
+    links.forEach(function (link) {
+      var place = foreignPlace(link.replace(/[.,;:!?)]+$/, ''));
+      if (place && places.indexOf(place) < 0) places.push(place);
+    });
+    return places;
+  }
+
+  // The hub link turned into the My page address (the hub's '#/me' route). null without an https link.
+  function meUrl(hubUrl) {
+    var url = httpsUrl(hubUrl);
+    if (!url) return null;
+    var u = new URL(url);
+    u.hash = '/me';
+    return u.toString();
+  }
+
+  Object.assign(api, {
+    encodeDraft: encodeDraft,
+    decodeDraft: decodeDraft,
+    linkHash: linkHash,
+    shareLink: shareLink,
+    readLink: readLink,
+    offSiteLinks: offSiteLinks,
+    meUrl: meUrl
+  });
+
   Object.assign(api, {
     HUB_URL: HUB_URL,
     IMG_BASE: IMG_BASE,
@@ -308,6 +471,7 @@
     themeColors: themeColors,
     defaultSettings: defaultSettings,
     mergeSettings: mergeSettings,
+    restoreDraft: restoreDraft,
     moveBlock: moveBlock,
     toggleBlock: toggleBlock,
     setValue: setValue
@@ -324,7 +488,7 @@
   // Only https links go into an email (spec section 2). null for anything else.
   function httpsUrl(u) {
     var s = text(u);
-    return /^https:\/\//i.test(s) && L.safeUrl(s) ? s : null;
+    return /^https:\/\//i.test(s) && L.safeUrl(s) ? new URL(s).href : null;
   }
 
   // Registry + challenge payload -> everything the blocks need, or null when the registry does
@@ -634,6 +798,13 @@
       '</td></tr>'), '20px 32px 8px 32px');
   }
 
+  // The student's own page on the hub, behind the AUS sign-in.
+  function meBlock(s, ctx, c) {
+    var url = meUrl(s.hubUrl);
+    if (!url) return '';
+    return section(renderText(s.texts.meText, ctx.values, BODY) + outlineButton(url, 'Open my page', c.header), '16px 32px 8px 32px');
+  }
+
   function whatsappBlock(s, ctx, c) {
     if (!ctx.whatsappUrl) return '';
     return section(renderText(s.texts.whatsapp, ctx.values, BODY) + outlineButton(ctx.whatsappUrl, 'Join on WhatsApp', c.header), '16px 32px 8px 32px');
@@ -658,7 +829,7 @@
 
   var RENDER = {
     header: headerBlock, intro: introBlock, stats: statsBlock, race: raceBlock, top: topBlock, reminder: reminderBlock,
-    prizes: prizesBlock, hub: hubBlock, whatsapp: whatsappBlock, signoff: signoffBlock, footer: footerBlock
+    prizes: prizesBlock, hub: hubBlock, me: meBlock, whatsapp: whatsappBlock, signoff: signoffBlock, footer: footerBlock
   };
 
   // The blocks that are on, in order, each marked when it closes a run of live blocks.
@@ -748,6 +919,10 @@
     hub: function (s, ctx) {
       var url = httpsUrl(s.hubUrl);
       return url ? [plainFill(s.texts.hubText, ctx.values), 'See live standings: ' + url].filter(Boolean).join('\n') : '';
+    },
+    me: function (s, ctx) {
+      var url = meUrl(s.hubUrl);
+      return url ? [plainFill(s.texts.meText, ctx.values), 'Open my page: ' + url].filter(Boolean).join('\n') : '';
     },
     whatsapp: function (s, ctx) {
       return ctx.whatsappUrl ? [plainFill(s.texts.whatsapp, ctx.values), 'Join on WhatsApp: ' + ctx.whatsappUrl].filter(Boolean).join('\n') : '';
